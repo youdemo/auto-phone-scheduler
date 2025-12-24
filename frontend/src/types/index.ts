@@ -1,0 +1,185 @@
+export interface Task {
+  id: number
+  name: string
+  description: string | null
+  command: string
+  cron_expression: string
+  enabled: boolean
+  notify_on_success: boolean
+  notify_on_failure: boolean
+  notification_channel_ids: number[] | null  // 空或 null 表示使用所有启用的渠道
+  auto_confirm_sensitive: boolean  // 敏感操作自动确认
+  created_at: string
+  updated_at: string
+  next_run: string | null
+}
+
+export interface TaskCreate {
+  name: string
+  description?: string
+  command: string
+  cron_expression: string
+  enabled?: boolean
+  notify_on_success?: boolean
+  notify_on_failure?: boolean
+  notification_channel_ids?: number[] | null
+  auto_confirm_sensitive?: boolean  // 敏感操作自动确认
+}
+
+export interface TaskUpdate {
+  name?: string
+  description?: string
+  command?: string
+  cron_expression?: string
+  enabled?: boolean
+  notify_on_success?: boolean
+  notify_on_failure?: boolean
+  notification_channel_ids?: number[] | null
+}
+
+export type ExecutionStatus = 'pending' | 'running' | 'success' | 'failed'
+
+export interface Execution {
+  id: number
+  task_id: number
+  task_name: string | null
+  status: ExecutionStatus
+  started_at: string | null
+  finished_at: string | null
+  error_message: string | null
+}
+
+export interface ExecutionStep {
+  step: number
+  action: string | Record<string, unknown> | null  // 支持字符串或对象
+  thinking: string | null  // 思考内容
+  description: string | null
+  screenshot: string | null
+  timestamp: string
+}
+
+export interface ExecutionDetail extends Execution {
+  steps: ExecutionStep[] | null
+  recording_path: string | null
+}
+
+export type NotificationType = 'dingtalk' | 'telegram'
+
+export interface NotificationChannel {
+  id: number
+  type: NotificationType
+  name: string
+  config: Record<string, string>
+  enabled: boolean
+}
+
+export interface NotificationChannelCreate {
+  type: NotificationType
+  name: string
+  config: Record<string, string>
+  enabled?: boolean
+}
+
+export interface Device {
+  serial: string
+  status: string
+  model: string | null
+  product: string | null
+}
+
+export interface Settings {
+  autoglm_base_url: string | null
+  autoglm_api_key: string | null
+  autoglm_model: string | null
+  autoglm_max_steps: number | null
+}
+
+// 系统提示词 - 针对设备配置
+export interface SystemPrompt {
+  id: number
+  name: string
+  description: string | null
+  device_serial: string | null
+  device_model: string | null
+  system_prompt: string | null
+  prefix_prompt: string | null
+  suffix_prompt: string | null
+  priority: number
+  enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface SystemPromptCreate {
+  name: string
+  description?: string
+  device_serial?: string
+  device_model?: string
+  system_prompt?: string
+  prefix_prompt?: string
+  suffix_prompt?: string
+  priority?: number
+  enabled?: boolean
+}
+
+export interface SystemPromptUpdate {
+  name?: string
+  description?: string
+  device_serial?: string
+  device_model?: string
+  system_prompt?: string
+  prefix_prompt?: string
+  suffix_prompt?: string
+  priority?: number
+  enabled?: boolean
+}
+
+// 任务模版
+export interface TaskTemplate {
+  id: number
+  name: string
+  description: string | null
+  command: string
+  default_cron: string | null
+  category: string | null
+  icon: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface TaskTemplateCreate {
+  name: string
+  description?: string
+  command: string
+  default_cron?: string
+  category?: string
+  icon?: string
+}
+
+export interface TaskTemplateUpdate {
+  name?: string
+  description?: string
+  command?: string
+  default_cron?: string
+  category?: string
+  icon?: string
+}
+
+// 自定义 APP 包名映射
+export interface AppPackage {
+  id: number
+  app_name: string
+  package_name: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AppPackageCreate {
+  app_name: string
+  package_name: string
+}
+
+export interface AppPackageUpdate {
+  app_name?: string
+  package_name?: string
+}

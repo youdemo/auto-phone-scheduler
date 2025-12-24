@@ -1,0 +1,29 @@
+services:
+  backend:
+    build: ./backend
+    container_name: auto-phone-scheduler-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./recordings:/app/recordings
+      - ~/.android:/root/.android:ro  # 共享 ADB 密钥
+    environment:
+      - DATABASE_URL=sqlite+aiosqlite:///./data/scheduler.db
+      - RECORDINGS_DIR=/app/recordings
+      - ADB_SERVER_SOCKET=tcp:host.docker.internal:5037  # 连接宿主机 ADB server
+    extra_hosts:
+      - "host.docker.internal:host-gateway"  # Linux 需要此配置
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        - VITE_API_URL=/api
+    container_name: auto-phone-scheduler-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
