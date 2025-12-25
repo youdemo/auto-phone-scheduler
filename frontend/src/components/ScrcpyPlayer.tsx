@@ -70,6 +70,13 @@ export function ScrcpyPlayer({
   // 创建解码器
   const createDecoder = useCallback(async (codecId: ScrcpyVideoCodecId) => {
     if (!WebCodecsVideoDecoder.isSupported) {
+      // 检查是否是安全上下文问题
+      if (!window.isSecureContext) {
+        throw new Error(
+          'WebCodecs API 需要安全上下文（HTTPS 或 localhost）。' +
+          '当前通过非安全连接访问，请使用 https:// 或在本地访问 localhost'
+        )
+      }
       throw new Error('浏览器不支持 WebCodecs API，请使用最新版 Chrome/Edge')
     }
 
