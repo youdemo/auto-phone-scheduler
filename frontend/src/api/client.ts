@@ -9,6 +9,7 @@ import type {
   NotificationChannelCreate,
   Device,
   Settings,
+  ConnectResponse,
   SystemPrompt,
   SystemPromptCreate,
   SystemPromptUpdate,
@@ -67,6 +68,8 @@ export const notificationsApi = {
 export const devicesApi = {
   list: () => api.get<Device[]>('/devices').then(r => r.data),
   refresh: () => api.post<Device[]>('/devices/refresh').then(r => r.data),
+  connect: (address: string) => api.post<ConnectResponse>('/devices/connect', { address }).then(r => r.data),
+  disconnect: (serial: string) => api.post<ConnectResponse>(`/devices/disconnect/${encodeURIComponent(serial)}`).then(r => r.data),
   getStreamUrl: (serial: string) => `${api.defaults.baseURL}/devices/${serial}/stream`,
   getScreenshotUrl: (serial: string) => `${api.defaults.baseURL}/devices/${serial}/screenshot`,
 }

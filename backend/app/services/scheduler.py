@@ -164,8 +164,13 @@ class SchedulerService:
             return job.next_run_time
         return None
 
-    async def _get_first_device(self) -> tuple[str | None, str | None]:
-        """获取第一个已连接的设备信息"""
+    async def _get_all_devices(self) -> list[tuple[str, str, str | None]]:
+        """获取所有已连接的设备信息
+
+        Returns:
+            list of (serial, status, model)
+        """
+        devices = []
         try:
             stdout, _ = await run_adb("devices", "-l")
             output = stdout.decode()
@@ -175,16 +180,58 @@ class SchedulerService:
                 if not line.strip():
                     continue
                 parts = line.split()
-                if len(parts) >= 2 and parts[1] == "device":
+                if len(parts) >= 2:
                     serial = parts[0]
+                    status = parts[1]
                     model = None
                     for part in parts[2:]:
                         if part.startswith("model:"):
                             model = part.split(":")[1]
                             break
-                    return serial, model
+                    devices.append((serial, status, model))
         except Exception:
             pass
+        return devices
+
+    async def _get_selected_device(
+        self, session: "AsyncSession"
+    ) -> tuple[str | None, str | None]:
+        """获取用户选定的设备，如未选定则返回第一个可用设备
+
+        优先使用用户在设置中选定的设备，如果该设备不可用则回退到第一个在线设备
+        """
+        from sqlalchemy import select as sql_select
+        from app.models.settings import SystemSettings
+
+        # 获取用户选定的设备
+        result = await session.execute(
+            sql_select(SystemSettings).where(SystemSettings.key == "selected_device")
+        )
+        setting = result.scalar_one_or_none()
+        selected_serial = setting.value if setting else None
+
+        # 获取所有设备
+        devices = await self._get_all_devices()
+        online_devices = [(s, m) for s, status, m in devices if status == "device"]
+
+        if not online_devices:
+            return None, None
+
+        # 如果有选定的设备且在线，使用它
+        if selected_serial:
+            for serial, model in online_devices:
+                if serial == selected_serial:
+                    return serial, model
+
+        # 否则返回第一个在线设备
+        return online_devices[0]
+
+    async def _get_first_device(self) -> tuple[str | None, str | None]:
+        """获取第一个已连接的设备信息（兼容旧调用）"""
+        devices = await self._get_all_devices()
+        for serial, status, model in devices:
+            if status == "device":
+                return serial, model
         return None, None
 
     async def execute_task(self, task_id: int):
@@ -202,8 +249,12 @@ class SchedulerService:
             if not task:
                 return
 
-            # 获取设备信息
-            device_serial, device_model = await self._get_first_device()
+            # 从数据库加载设置
+            result = await session.execute(sql_select(SystemSettings))
+            db_settings = {s.key: s.value for s in result.scalars().all()}
+
+            # 获取设备信息（优先使用用户选定的设备）
+            device_serial, device_model = await self._get_selected_device(session)
 
             # 创建执行记录
             execution = Execution(
@@ -214,10 +265,6 @@ class SchedulerService:
             session.add(execution)
             await session.commit()
             await session.refresh(execution)
-
-            # 从数据库加载设置
-            result = await session.execute(sql_select(SystemSettings))
-            db_settings = {s.key: s.value for s in result.scalars().all()}
 
             base_url = db_settings.get("autoglm_base_url") or settings.autoglm_base_url
             api_key = db_settings.get("autoglm_api_key") or settings.autoglm_api_key
@@ -519,8 +566,8 @@ class SchedulerService:
             if not execution:
                 return
 
-            # 获取设备信息
-            device_serial, device_model = await self._get_first_device()
+            # 获取设备信息（优先使用用户选定的设备）
+            device_serial, device_model = await self._get_selected_device(session)
 
             # 从数据库加载设置（参考 debug.py 的方式）
             result = await session.execute(sql_select(SystemSettings))

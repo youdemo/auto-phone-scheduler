@@ -1,12 +1,23 @@
 import asyncio
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse, Response
+from pydantic import BaseModel
 
 from app.schemas.device import DeviceInfo
 from app.services.adb import run_adb, run_adb_exec
 from app.services.streamer import generate_mjpeg_stream
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
+
+
+class ConnectRequest(BaseModel):
+    address: str  # host:port 格式，例如 192.168.1.100:5555
+
+
+class ConnectResponse(BaseModel):
+    success: bool
+    message: str
+    serial: str | None = None
 
 
 async def get_connected_devices() -> list[DeviceInfo]:
@@ -88,3 +99,83 @@ async def get_screenshot(serial: str):
         )
 
     return Response(status_code=204)
+
+
+@router.post("/connect", response_model=ConnectResponse)
+async def connect_device(request: ConnectRequest):
+    """连接远程设备（WiFi/局域网）
+
+    支持格式：
+    - host:port (例如 192.168.1.100:5555)
+    - host (默认使用端口 5555)
+    """
+    address = request.address.strip()
+
+    # 如果没有指定端口，添加默认端口
+    if ":" not in address:
+        address = f"{address}:5555"
+
+    try:
+        stdout, stderr = await run_adb("connect", address)
+        output = stdout.decode() + stderr.decode()
+
+        # 检查连接结果
+        if "connected" in output.lower():
+            # 连接成功，等待设备就绪
+            await asyncio.sleep(1)
+            return ConnectResponse(
+                success=True,
+                message=f"成功连接到 {address}",
+                serial=address,
+            )
+        elif "already connected" in output.lower():
+            return ConnectResponse(
+                success=True,
+                message=f"设备 {address} 已经连接",
+                serial=address,
+            )
+        else:
+            return ConnectResponse(
+                success=False,
+                message=f"连接失败: {output.strip()}",
+            )
+    except Exception as e:
+        return ConnectResponse(
+            success=False,
+            message=f"连接错误: {str(e)}",
+        )
+
+
+@router.post("/disconnect/{serial}", response_model=ConnectResponse)
+async def disconnect_device(serial: str):
+    """断开远程设备连接
+
+    仅支持断开通过 WiFi/网络连接的设备（host:port 格式）
+    """
+    # 检查是否是网络设备（包含冒号表示 host:port）
+    if ":" not in serial or serial.startswith("emulator"):
+        return ConnectResponse(
+            success=False,
+            message="只能断开网络连接的设备",
+        )
+
+    try:
+        stdout, stderr = await run_adb("disconnect", serial)
+        output = stdout.decode() + stderr.decode()
+
+        if "disconnected" in output.lower() or "error" not in output.lower():
+            return ConnectResponse(
+                success=True,
+                message=f"已断开 {serial}",
+                serial=serial,
+            )
+        else:
+            return ConnectResponse(
+                success=False,
+                message=f"断开失败: {output.strip()}",
+            )
+    except Exception as e:
+        return ConnectResponse(
+            success=False,
+            message=f"断开错误: {str(e)}",
+        )

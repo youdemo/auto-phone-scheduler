@@ -92,6 +92,13 @@ export interface Settings {
   autoglm_api_key: string | null
   autoglm_model: string | null
   autoglm_max_steps: number | null
+  selected_device: string | null  // 用户选择的设备 serial
+}
+
+export interface ConnectResponse {
+  success: boolean
+  message: string
+  serial: string | null
 }
 
 // 系统提示词 - 针对设备配置

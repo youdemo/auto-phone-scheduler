@@ -33,6 +33,9 @@ import {
   Trash2,
   Send,
   MessageSquare,
+  Wifi,
+  Unplug,
+  Check,
 } from 'lucide-react'
 
 // API 配置组件
@@ -44,6 +47,7 @@ function ApiSettings() {
     autoglm_model: '',
     autoglm_max_steps: 100,
   })
+  const [remoteAddress, setRemoteAddress] = useState('')
 
   const { data: settings } = useQuery({
     queryKey: ['settings'],
@@ -67,6 +71,46 @@ function ApiSettings() {
     mutationFn: devicesApi.refresh,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['devices'] })
+    },
+  })
+
+  const connectDeviceMutation = useMutation({
+    mutationFn: devicesApi.connect,
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.message)
+        setRemoteAddress('')
+        queryClient.invalidateQueries({ queryKey: ['devices'] })
+      } else {
+        toast.error(data.message)
+      }
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || '连接失败')
+    },
+  })
+
+  const disconnectDeviceMutation = useMutation({
+    mutationFn: devicesApi.disconnect,
+    onSuccess: (data) => {
+      if (data.success) {
+        toast.success(data.message)
+        queryClient.invalidateQueries({ queryKey: ['devices'] })
+        // 如果断开的是当前选中的设备，清除选择
+        if (settings?.selected_device === data.serial) {
+          updateMutation.mutate({ selected_device: '' })
+        }
+      } else {
+        toast.error(data.message)
+      }
+    },
+  })
+
+  const selectDeviceMutation = useMutation({
+    mutationFn: (serial: string) => settingsApi.update({ selected_device: serial }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      toast.success('已选择设备')
     },
   })
 
@@ -260,7 +304,7 @@ function ApiSettings() {
             <div>
               <CardTitle>设备管理</CardTitle>
               <CardDescription>
-                查看和管理已连接的 Android 设备
+                选择用于执行任务的 Android 设备，支持 USB 和 WiFi 连接
               </CardDescription>
             </div>
             <Button
@@ -277,7 +321,33 @@ function ApiSettings() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
+          {/* 远程设备连接 */}
+          <div className="flex gap-2">
+            <Input
+              value={remoteAddress}
+              onChange={(e) => setRemoteAddress(e.target.value)}
+              placeholder="输入设备 IP 地址，如 192.168.1.100:5555"
+              className="flex-1"
+            />
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (remoteAddress.trim()) {
+                  connectDeviceMutation.mutate(remoteAddress.trim())
+                }
+              }}
+              disabled={connectDeviceMutation.isPending || !remoteAddress.trim()}
+            >
+              <Wifi className={`h-4 w-4 mr-2 ${connectDeviceMutation.isPending ? 'animate-pulse' : ''}`} />
+              连接
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            WiFi 连接: 确保设备与电脑在同一局域网，并已执行 adb tcpip 5555
+          </p>
+
+          {/* 设备列表 */}
           {devicesLoading ? (
             <p className="text-muted-foreground">加载中...</p>
           ) : devices.length === 0 ? (
@@ -285,34 +355,78 @@ function ApiSettings() {
               <Smartphone className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
               <p className="text-muted-foreground mb-2">未检测到设备</p>
               <p className="text-sm text-muted-foreground">
-                请确保设备已通过 USB 连接，并开启开发者模式和 USB 调试
+                请确保设备已通过 USB 连接并开启 USB 调试，或通过上方输入框连接 WiFi 设备
               </p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {devices.map((device) => (
-                <div
-                  key={device.serial}
-                  className="flex items-center justify-between p-4 rounded-lg bg-muted/50"
-                >
-                  <div className="flex items-center gap-3">
-                    <Smartphone className="h-5 w-5" />
-                    <div>
-                      <p className="font-medium">
-                        {device.model || device.product || device.serial}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {device.serial}
-                      </p>
+            <div className="space-y-2">
+              {devices.map((device) => {
+                const isSelected = settings?.selected_device === device.serial
+                const isOnline = device.status === 'device'
+                const isNetworkDevice = device.serial.includes(':') && !device.serial.startsWith('emulator')
+
+                return (
+                  <div
+                    key={device.serial}
+                    className={`flex items-center justify-between p-4 rounded-lg border-2 transition-colors ${
+                      isSelected
+                        ? 'border-primary bg-primary/5'
+                        : 'border-transparent bg-muted/50 hover:bg-muted'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      {isNetworkDevice ? (
+                        <Wifi className="h-5 w-5 shrink-0" />
+                      ) : (
+                        <Smartphone className="h-5 w-5 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">
+                          {device.model || device.product || device.serial}
+                        </p>
+                        <p className="text-sm text-muted-foreground truncate">
+                          {device.serial}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 ml-2">
+                      {isSelected && (
+                        <Badge variant="default" className="shrink-0">
+                          <Check className="h-3 w-3 mr-1" />
+                          已选择
+                        </Badge>
+                      )}
+                      <Badge
+                        variant={isOnline ? 'success' : 'secondary'}
+                        className="shrink-0"
+                      >
+                        {isOnline ? '在线' : device.status}
+                      </Badge>
+                      {isOnline && !isSelected && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => selectDeviceMutation.mutate(device.serial)}
+                          disabled={selectDeviceMutation.isPending}
+                        >
+                          选择
+                        </Button>
+                      )}
+                      {isNetworkDevice && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => disconnectDeviceMutation.mutate(device.serial)}
+                          disabled={disconnectDeviceMutation.isPending}
+                          title="断开连接"
+                        >
+                          <Unplug className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </div>
-                  <Badge
-                    variant={device.status === 'device' ? 'success' : 'secondary'}
-                  >
-                    {device.status === 'device' ? '已连接' : device.status}
-                  </Badge>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>
