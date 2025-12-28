@@ -3,42 +3,7 @@ Monkey patch for phone_agent to fix action parsing issues.
 
 Some models return action with XML tags like </answer> that need to be cleaned.
 """
-
-
-def apply_patches():
-    """Apply all patches to phone_agent library."""
-    _patch_model_client_parse_response()
-    _patch_parse_action()
-    _extend_app_packages()
-
-
-def _patch_model_client_parse_response():
-    """
-    Patch ModelClient._parse_response to clean XML tags from action.
-
-    Fixes issue where models return:
-        do(action="Launch", app="XXX")</answer>
-    Instead of:
-        do(action="Launch", app="XXX")
-    """
-    from phone_agent.model.client import ModelClient
-
-    original_parse_response = ModelClient._parse_response
-
-    def patched_parse_response(self, content: str) -> tuple[str, str]:
-        thinking, action = original_parse_response(self, content)
-        # Clean XML tags from action
-        action = (
-            action
-            .replace("</answer>", "")
-            .replace("</think>", "")
-            .replace("<answer>", "")
-            .replace("<think>", "")
-            .strip()
-        )
-        return thinking, action
-
-    ModelClient._parse_response = patched_parse_response
+import re
 
 
 def _clean_action_string(action: str) -> str:
@@ -48,9 +13,9 @@ def _clean_action_string(action: str) -> str:
     Handles patterns like:
         do(action="Tap", element=[614,818])</answer>
         <answer>do(action="Tap", element=[614,818])</answer>
+        do(action="Tap", element="[508, 370]")\n```
+        ```python\ndo(action="Tap")\n```
     """
-    import re
-
     cleaned = action
 
     # Remove common XML-like tags
@@ -67,7 +32,46 @@ def _clean_action_string(action: str) -> str:
     # Remove any remaining XML-like tags using regex
     cleaned = re.sub(r'</?[a-zA-Z_][a-zA-Z0-9_]*>', '', cleaned)
 
+    # Remove markdown code block markers (``` or ```python etc.)
+    # Pattern 1: Opening marker with optional language specifier (```python, ```html, etc.)
+    cleaned = re.sub(r'```[a-zA-Z]*\n?', '', cleaned)
+    # Pattern 2: Closing marker (standalone ```)
+    cleaned = re.sub(r'\n?```', '', cleaned)
+
+    # Remove trailing newlines and whitespace before final strip
+    cleaned = cleaned.rstrip('\n\r\t ')
+
     return cleaned.strip()
+
+
+def apply_patches():
+    """Apply all patches to phone_agent library."""
+    _patch_model_client_parse_response()
+    _patch_parse_action()
+    _extend_app_packages()
+
+
+def _patch_model_client_parse_response():
+    """
+    Patch ModelClient._parse_response to clean XML tags and markdown from action.
+
+    Fixes issue where models return:
+        do(action="Launch", app="XXX")</answer>
+        do(action="Tap", element="[508, 370]")\n```
+    Instead of:
+        do(action="Launch", app="XXX")
+    """
+    from phone_agent.model.client import ModelClient
+
+    original_parse_response = ModelClient._parse_response
+
+    def patched_parse_response(self, content: str) -> tuple[str, str]:
+        thinking, action = original_parse_response(self, content)
+        # Use the common clean function
+        action = _clean_action_string(action)
+        return thinking, action
+
+    ModelClient._parse_response = patched_parse_response
 
 
 def _patch_parse_action():
@@ -76,17 +80,31 @@ def _patch_parse_action():
 
     This is a more robust fix as it handles the action right before AST parsing,
     regardless of how the action string was produced.
+
+    IMPORTANT: phone_agent/agent.py imports parse_action directly:
+        from phone_agent.actions.handler import do, finish, parse_action
+    So we MUST patch the agent module's namespace directly, not just handler.
     """
     from phone_agent.actions import handler
+    import phone_agent.agent as agent_module
 
     original_parse_action = handler.parse_action
 
     def patched_parse_action(response: str):
         # Clean the action string before parsing
         cleaned_response = _clean_action_string(response)
+        if cleaned_response != response:
+            print(f"[patch] Cleaned action: {repr(response[:80])} -> {repr(cleaned_response[:80])}")
         return original_parse_action(cleaned_response)
 
+    # Patch the handler module
     handler.parse_action = patched_parse_action
+
+    # CRITICAL: Patch the agent module's direct import reference
+    # agent.py does: from phone_agent.actions.handler import parse_action
+    # This creates a local binding that won't be affected by patching handler
+    agent_module.parse_action = patched_parse_action
+    print("[patch] parse_action patched in both handler and agent modules")
 
 
 def _extend_app_packages():

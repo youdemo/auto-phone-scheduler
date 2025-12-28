@@ -60,12 +60,28 @@ class StreamingModelClient:
         in_action_phase = False
         first_token_received = False
 
+        # 重复检测：检测模型陷入无限循环
+        repeat_detector = ""
+        repeat_count = 0
+        max_repeat_count = 10  # 连续重复 10 次相同模式则终止
+
         for chunk in stream:
             if len(chunk.choices) == 0:
                 continue
             if chunk.choices[0].delta.content is not None:
                 content = chunk.choices[0].delta.content
                 raw_content += content
+
+                # 重复检测：检测类似 "```html\n" 的无限循环
+                if content.strip():
+                    if content == repeat_detector:
+                        repeat_count += 1
+                        if repeat_count >= max_repeat_count:
+                            logger.warning(f"[streaming] 检测到重复输出循环: {repr(content)} 重复 {repeat_count} 次，终止流")
+                            raise ValueError(f"模型输出异常：检测到重复模式 {repr(content[:20])}")
+                    else:
+                        repeat_detector = content
+                        repeat_count = 1
 
                 # 记录首个 token 时间
                 if not first_token_received:
@@ -164,22 +180,29 @@ class StreamingModelClient:
         return "", self._clean_action(content)
 
     def _clean_stream_content(self, content: str) -> str:
-        """清理流式内容中的 XML 标签（用于一次性发送的内容）"""
+        """清理流式内容中的 XML 标签和 markdown 代码块标记（用于一次性发送的内容）"""
         import re
         # 移除完整的 XML 标签
         cleaned = re.sub(r'</?[a-zA-Z_][a-zA-Z0-9_]*>', '', content)
+        # 移除 markdown 代码块标记
+        cleaned = re.sub(r'```[a-zA-Z]*\n?', '', cleaned)
+        cleaned = re.sub(r'\n?```', '', cleaned)
         return cleaned
 
     def _clean_stream_buffer(self, buffer: str) -> tuple[str, str]:
         """
-        清理流式 buffer 中的 XML 标签，返回 (可发送的内容, 需保留的内容)。
+        清理流式 buffer 中的 XML 标签和 markdown 代码块，返回 (可发送的内容, 需保留的内容)。
 
-        保留可能是标签开始的内容，避免截断标签。
+        保留可能是标签或 markdown 开始的内容，避免截断。
         """
         import re
 
         # 首先移除完整的 XML 标签
         cleaned = re.sub(r'</?[a-zA-Z_][a-zA-Z0-9_]*>', '', buffer)
+
+        # 移除完整的 markdown 代码块标记
+        cleaned = re.sub(r'```[a-zA-Z]*\n?', '', cleaned)
+        cleaned = re.sub(r'\n?```', '', cleaned)
 
         # 检查末尾是否可能是标签的开始
         # 匹配 < 后面跟着可能的标签名前缀
@@ -192,10 +215,16 @@ class StreamingModelClient:
         if cleaned.endswith('<'):
             return cleaned[:-1], '<'
 
+        # 检查末尾是否可能是 markdown 代码块的开始
+        # 匹配 ` 或 `` 或 ```（可能后面还有语言标识符）
+        md_match = re.search(r'`{1,3}[a-zA-Z]*$', cleaned)
+        if md_match:
+            return cleaned[:md_match.start()], cleaned[md_match.start():]
+
         return cleaned, ""
 
     def _clean_thinking(self, thinking: str) -> str:
-        """清理 thinking 字符串中的 XML 标签"""
+        """清理 thinking 字符串中的 XML 标签和 markdown 代码块"""
         import re
 
         cleaned = thinking
@@ -212,6 +241,10 @@ class StreamingModelClient:
 
         # 使用正则移除任何残留的 XML 标签
         cleaned = re.sub(r'</?[a-zA-Z_][a-zA-Z0-9_]*>', '', cleaned)
+
+        # 移除 markdown 代码块标记
+        cleaned = re.sub(r'```[a-zA-Z]*\n?', '', cleaned)
+        cleaned = re.sub(r'\n?```', '', cleaned)
 
         return cleaned.strip()
 
@@ -234,6 +267,15 @@ class StreamingModelClient:
 
         # 使用正则移除任何残留的 XML 标签
         cleaned = re.sub(r'</?[a-zA-Z_][a-zA-Z0-9_]*>', '', cleaned)
+
+        # 移除 markdown 代码块标记 (```python, ```html, ``` 等)
+        # Pattern 1: Opening marker with optional language specifier
+        cleaned = re.sub(r'```[a-zA-Z]*\n?', '', cleaned)
+        # Pattern 2: Closing marker (standalone ```)
+        cleaned = re.sub(r'\n?```', '', cleaned)
+
+        # 移除尾部换行和空白
+        cleaned = cleaned.rstrip('\n\r\t ')
 
         return cleaned.strip()
 
