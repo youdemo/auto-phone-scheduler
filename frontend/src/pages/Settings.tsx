@@ -17,6 +17,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -942,6 +952,7 @@ function NotificationSettings() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingChannel, setEditingChannel] = useState<NotificationChannel | null>(null)
   const [channelType, setChannelType] = useState<NotificationType>('dingtalk')
+  const [deleteChannelId, setDeleteChannelId] = useState<number | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     enabled: true,
@@ -1130,11 +1141,7 @@ function NotificationSettings() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => {
-                        if (confirm('确定要删除这个通知渠道吗？')) {
-                          deleteMutation.mutate(channel.id)
-                        }
-                      }}
+                      onClick={() => setDeleteChannelId(channel.id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -1247,6 +1254,32 @@ function NotificationSettings() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* 删除通知渠道确认对话框 */}
+      <AlertDialog open={deleteChannelId !== null} onOpenChange={(open) => !open && setDeleteChannelId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除这个通知渠道吗？此操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteChannelId !== null) {
+                  deleteMutation.mutate(deleteChannelId)
+                  setDeleteChannelId(null)
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -1256,6 +1289,7 @@ function AppPackageSettings() {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPackage, setEditingPackage] = useState<AppPackage | null>(null)
+  const [deletePackageId, setDeletePackageId] = useState<number | null>(null)
   const [formData, setFormData] = useState({
     app_name: '',
     package_name: '',
@@ -1373,11 +1407,7 @@ function AppPackageSettings() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => {
-                        if (confirm('确定要删除这个映射吗？')) {
-                          deleteMutation.mutate(pkg.id)
-                        }
-                      }}
+                      onClick={() => setDeletePackageId(pkg.id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -1444,6 +1474,32 @@ function AppPackageSettings() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* 删除 APP 映射确认对话框 */}
+      <AlertDialog open={deletePackageId !== null} onOpenChange={(open) => !open && setDeletePackageId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除这个 APP 包名映射吗？此操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deletePackageId !== null) {
+                  deleteMutation.mutate(deletePackageId)
+                  setDeletePackageId(null)
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

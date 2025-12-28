@@ -72,6 +72,7 @@ function ExecutionHistory() {
   const navigate = useNavigate()
   const [page, setPage] = useState(0)
   const [showClearDialog, setShowClearDialog] = useState(false)
+  const [deleteExecutionId, setDeleteExecutionId] = useState<number | null>(null)
   const pageSize = 10
 
   const { data: countData } = useQuery({
@@ -163,6 +164,32 @@ function ExecutionHistory() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* 删除单条记录确认对话框 */}
+        <AlertDialog open={deleteExecutionId !== null} onOpenChange={(open) => !open && setDeleteExecutionId(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>确认删除</AlertDialogTitle>
+              <AlertDialogDescription>
+                确定要删除这条执行记录吗？此操作不可撤销。
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>取消</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (deleteExecutionId !== null) {
+                    deleteMutation.mutate(deleteExecutionId)
+                    setDeleteExecutionId(null)
+                  }
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                删除
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
 
       {/* 列表 */}
@@ -214,11 +241,7 @@ function ExecutionHistory() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => {
-                        if (confirm('确定要删除这条记录吗？')) {
-                          deleteMutation.mutate(exec.id)
-                        }
-                      }}
+                      onClick={() => setDeleteExecutionId(exec.id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -265,6 +288,7 @@ function TaskList() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isTemplateDialogOpen, setIsTemplateDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [deleteTaskId, setDeleteTaskId] = useState<number | null>(null)
   const [formData, setFormData] = useState<TaskCreate>({
     name: '',
     description: '',
@@ -498,11 +522,7 @@ function TaskList() {
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => {
-                        if (confirm('确定要删除这个任务吗？')) {
-                          deleteMutation.mutate(task.id)
-                        }
-                      }}
+                      onClick={() => setDeleteTaskId(task.id)}
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -907,6 +927,32 @@ function TaskList() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* 删除任务确认对话框 */}
+      <AlertDialog open={deleteTaskId !== null} onOpenChange={(open) => !open && setDeleteTaskId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除</AlertDialogTitle>
+            <AlertDialogDescription>
+              确定要删除这个任务吗？相关的执行记录也会被删除，此操作不可撤销。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteTaskId !== null) {
+                  deleteMutation.mutate(deleteTaskId)
+                  setDeleteTaskId(null)
+                }
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              删除
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
